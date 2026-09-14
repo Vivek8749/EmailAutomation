@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Email automation overview and quick actions</p>
+    </div>
+    <div class="header-actions">
+        <form action="{{ url_for('manual_trigger') }}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-primary" id="btn-trigger-now">
+                <span class="btn-icon">🚀</span> Trigger Now
+            </button>
+        </form>
+        <button class="btn btn-secondary" id="btn-send-test" onclick="openTestModal()">
+            <span class="btn-icon">🧪</span> Send Test
+        </button>
+    </div>
+</div>
+
+{% if not config_valid %}
+<div class="alert alert-warning">
+    <span class="alert-icon">⚠️</span>
+    <div>
+        <strong>Configuration Incomplete</strong>
+        <p>The following settings are missing:</p>
+        <ul>
+            {% for error in config_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        <a href="{{ url_for('settings_page') }}" class="alert-link">Go to Settings →</a>
+    </div>
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card" id="stat-total-sent">
+        <div class="stat-icon stat-icon-sent">📤</div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.total_sent }}</span>
+            <span class="stat-label">Total Sent</span>
+        </div>
+        <div class="stat-trend">
+            <span class="trend-value trend-up">+{{ stats.today_sent }} today</span>
+        </div>
+    </div>
+
+    <div class="stat-card" id="stat-total-failed">
+        <div class="stat-icon stat-icon-failed">❌</div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.total_failed }}</span>
+            <span class="stat-label">Total Failed</span>
+        </div>
+        <div class="stat-trend">
+            <span class="trend-value {% if stats.today_failed > 0 %}trend-down{% else %}trend-neutral{% endif %}">{{ stats.today_failed }} today</span>
+        </div>
+    </div>
+
+    <div class="stat-card" id="stat-total-emails">
+        <div class="stat-icon stat-icon-total">📧</div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.total_emails }}</span>
+            <span class="stat-label">Total Processed</span>
+        </div>
+    </div>
+
+    <div class="stat-card" id="stat-last-run">
+        <div class="stat-icon stat-icon-clock">🕐</div>
+        <div class="stat-info">
+            {% if stats.last_run %}
+            <span class="stat-value stat-value-sm">{{ stats.last_run.started_at[:16] | replace('T', ' ') }}</span>
+            <span class="stat-label">Last Run (UTC)</span>
+            {% else %}
+            <span class="stat-value stat-value-sm">Never</span>
+            <span class="stat-label">Last Run</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Two-column layout -->
+<div class="dashboard-grid">
+    <!-- Recent Activity -->
+    <div class="card" id="recent-activity-card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Activity</h2>
+            <a href="{{ url_for('logs_page') }}" class="card-link">View All →</a>
+        </div>
+        <div class="card-body">
+            {% if recent_activity %}
+            <div class="activity-list">
+                {% for item in recent_activity %}
+                <div class="activity-item">
+                    <div class="activity-status">
+                        <span class="badge badge-{{ item.status }}">{{ item.status }}</span>
+                    </div>
+                    <div class="activity-info">
+                        <span class="activity-recipient">{{ item.recipient_name or item.recipient }}</span>
+                        <span class="activity-subject">{{ item.subject }}</span>
+                    </div>
+                    <div class="activity-time">
+                        {{ item.sent_at[:16] | replace('T', ' ') }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">📭</span>
+                <p>No email activity yet</p>
+                <p class="empty-hint">Trigger your first email run or send a test email</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Runs -->
+    <div class="card" id="recent-runs-card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Runs</h2>
+        </div>
+        <div class="card-body">
+            {% if stats.recent_runs %}
+            <div class="activity-list">
+                {% for run in stats.recent_runs %}
+                <div class="activity-item">
+                    <div class="activity-status">
+                        <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
+                    </div>
+                    <div class="activity-info">
+                        <span class="activity-recipient">{{ run.sent_count }} sent, {{ run.failed_count }} failed</span>
+                        <span class="activity-subject">{{ run.total_emails }} total • via {{ run.trigger_source }}</span>
+                    </div>
+                    <div class="activity-time">
+                        {{ run.started_at[:16] | replace('T', ' ') }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">🔄</span>
+                <p>No runs recorded yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Test Email Modal -->
+<div class="modal-overlay" id="test-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Send Test Email</h3>
+            <button class="modal-close" onclick="closeTestModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="test-email-input">Recipient Email</label>
+                <input type="email" id="test-email-input" class="form-input" placeholder="your@email.com">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeTestModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="sendTestEmail()" id="btn-send-test-confirm">
+                <span class="btn-icon">📧</span> Send Test
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openTestModal() {
+        document.getElementById('test-modal').classList.add('visible');
+        document.getElementById('test-email-input').focus();
+    }
+
+    function closeTestModal() {
+        document.getElementById('test-modal').classList.remove('visible');
+    }
+
+    async function sendTestEmail() {
+        const email = document.getElementById('test-email-input').value.trim();
+        if (!email) {
+            showToast('Please enter an email address', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btn-send-test-confirm');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        const { ok, data } = await apiCall('/api/send-test', 'POST', { to: email });
+
+        if (ok) {
+            showToast(`Test email sent to ${email}!`, 'success');
+            closeTestModal();
+        } else {
+            showToast(data.error || 'Failed to send test email', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn-icon">📧</span> Send Test';
+    }
+
+    // Enter key support for modal
+    document.getElementById('test-email-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendTestEmail();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-subtitle">Configuration overview and connection tests</p>
+    </div>
+</div>
+
+{% if not config_valid %}
+<div class="alert alert-warning">
+    <span class="alert-icon">⚠️</span>
+    <div>
+        <strong>Configuration Incomplete</strong>
+        <p>Set these environment variables (in your <code>.env</code> file or Render dashboard):</p>
+        <ul>
+            {% for error in config_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+<div class="settings-grid">
+    <!-- Current Configuration -->
+    <div class="card" id="config-card">
+        <div class="card-header">
+            <h2 class="card-title">Current Configuration</h2>
+            <span class="badge badge-{{ 'sent' if config_valid else 'failed' }}">
+                {{ 'Valid' if config_valid else 'Incomplete' }}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="config-list">
+                {% for key, value in config.items() %}
+                <div class="config-item">
+                    <span class="config-key">{{ key }}</span>
+                    <span class="config-value">{{ value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Tests -->
+    <div class="card" id="connection-tests-card">
+        <div class="card-header">
+            <h2 class="card-title">Connection Tests</h2>
+        </div>
+        <div class="card-body">
+            <div class="test-buttons">
+                <div class="test-item">
+                    <div class="test-info">
+                        <span class="test-icon">📧</span>
+                        <div>
+                            <strong>SMTP Connection</strong>
+                            <p>Test Gmail SMTP authentication</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="testSMTP(this)" id="btn-test-smtp">
+                        Test
+                    </button>
+                </div>
+                <div class="test-result" id="smtp-result"></div>
+
+                <div class="test-item">
+                    <div class="test-info">
+                        <span class="test-icon">📊</span>
+                        <div>
+                            <strong>Google Sheets</strong>
+                            <p>Test spreadsheet access</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="testSheets(this)" id="btn-test-sheets">
+                        Test
+                    </button>
+                </div>
+                <div class="test-result" id="sheets-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Available Templates -->
+    <div class="card" id="templates-card">
+        <div class="card-header">
+            <h2 class="card-title">Email Templates</h2>
+        </div>
+        <div class="card-body">
+            {% if templates %}
+            <div class="template-list">
+                {% for tpl in templates %}
+                <div class="template-item">
+                    <span class="template-icon">📄</span>
+                    <span class="template-name">{{ tpl.name }}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="previewTemplate('{{ tpl.name }}')" id="btn-preview-{{ tpl.name }}">
+                        Preview
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <span class="empty-icon">📄</span>
+                <p>No templates found</p>
+                <p class="empty-hint">Add .html files to templates/email_templates/</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Template Source -->
+    <div class="card" id="template-source-card">
+        <div class="card-header">
+            <h2 class="card-title">Template Source</h2>
+            <span class="badge badge-source">{{ config.DEFAULT_TEMPLATE }}</span>
+        </div>
+        <div class="card-body">
+            {% if template_content %}
+            <pre class="code-block"><code>{{ template_content }}</code></pre>
+            {% else %}
+            <div class="empty-state">
+                <p>Template file not found</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Template Preview Modal -->
+<div class="modal-overlay" id="preview-modal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Template Preview</h3>
+            <button class="modal-close" onclick="closePreviewModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="preview-frame" id="preview-frame"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closePreviewModal()">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function testSMTP(btn) {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+        const resultEl = document.getElementById('smtp-result');
+
+        const { ok, data } = await apiCall('/api/test-smtp', 'POST');
+
+        if (ok && data.success) {
+            resultEl.innerHTML = '<span class="test-success">✅ SMTP connection successful!</span>';
+            showToast('SMTP connection OK', 'success');
+        } else {
+            resultEl.innerHTML = `<span class="test-error">❌ ${data.error || 'Connection failed'}</span>`;
+            showToast('SMTP connection failed', 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test';
+    }
+
+    async function testSheets(btn) {
+        btn.disabled = true;
+        btn.textContent = 'Testing...';
+        const resultEl = document.getElementById('sheets-result');
+
+        const { ok, data } = await apiCall('/api/test-sheets', 'POST');
+
+        if (ok && data.success) {
+            resultEl.innerHTML = `<span class="test-success">✅ Connected to "${data.title}" — Headers: ${data.headers.join(', ')}</span>`;
+            showToast('Google Sheets connection OK', 'success');
+        } else {
+            resultEl.innerHTML = `<span class="test-error">❌ ${data.error || 'Connection failed'}</span>`;
+            showToast('Google Sheets connection failed', 'error');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Test';
+    }
+
+    async function previewTemplate(name) {
+        const modal = document.getElementById('preview-modal');
+        const frame = document.getElementById('preview-frame');
+        frame.innerHTML = '<p style="text-align:center;padding:40px;color:#94a3b8;">Loading preview...</p>';
+        modal.classList.add('visible');
+
+        const { ok, data } = await apiCall('/api/preview-template', 'POST', { template: name });
+
+        if (ok) {
+            frame.innerHTML = data.html;
+        } else {
+            frame.innerHTML = `<p style="color:#ef4444;padding:20px;">Error: ${data.error}</p>`;
+        }
+    }
+
+    function closePreviewModal() {
+        document.getElementById('preview-modal').classList.remove('visible');
+    }
+</script>
+{% endblock %}

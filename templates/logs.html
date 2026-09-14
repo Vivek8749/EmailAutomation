@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Email Logs</h1>
+        <p class="page-subtitle">{{ total_count }} total entries</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card filter-card">
+    <form method="GET" action="{{ url_for('logs_page') }}" class="filter-form" id="filter-form">
+        <div class="filter-group">
+            <label for="search-input" class="filter-label">Search</label>
+            <input type="text" name="search" id="search-input" class="form-input" 
+                   placeholder="Search by email or name..." value="{{ search }}">
+        </div>
+        <div class="filter-group">
+            <label for="status-filter" class="filter-label">Status</label>
+            <select name="status" id="status-filter" class="form-select">
+                <option value="">All</option>
+                <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
+                <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary btn-sm" id="btn-apply-filter">Apply</button>
+            <a href="{{ url_for('logs_page') }}" class="btn btn-ghost btn-sm" id="btn-clear-filter">Clear</a>
+        </div>
+    </form>
+</div>
+
+<!-- Logs Table -->
+<div class="card">
+    <div class="card-body table-wrapper">
+        {% if logs %}
+        <table class="data-table" id="logs-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Recipient</th>
+                    <th>Subject</th>
+                    <th>Source</th>
+                    <th>Sent At (UTC)</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td><span class="badge badge-{{ log.status }}">{{ log.status }}</span></td>
+                    <td>
+                        <div class="cell-stacked">
+                            <span class="cell-primary">{{ log.recipient_name or '—' }}</span>
+                            <span class="cell-secondary">{{ log.recipient }}</span>
+                        </div>
+                    </td>
+                    <td class="cell-subject">{{ log.subject }}</td>
+                    <td><span class="badge badge-source">{{ log.trigger_source }}</span></td>
+                    <td class="cell-time">{{ log.sent_at[:19] | replace('T', ' ') }}</td>
+                    <td class="cell-error">{{ log.error_message[:80] if log.error_message else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <span class="empty-icon">📋</span>
+            <p>No log entries found</p>
+            {% if search or status_filter %}
+            <p class="empty-hint">Try adjusting your filters</p>
+            {% else %}
+            <p class="empty-hint">Logs will appear here after emails are sent</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination" id="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('logs_page', page=page-1, status=status_filter, search=search) }}" class="pagination-btn" id="btn-prev-page">
+        ← Previous
+    </a>
+    {% endif %}
+    
+    <div class="pagination-info">
+        Page {{ page }} of {{ total_pages }}
+    </div>
+    
+    {% if page < total_pages %}
+    <a href="{{ url_for('logs_page', page=page+1, status=status_filter, search=search) }}" class="pagination-btn" id="btn-next-page">
+        Next →
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
